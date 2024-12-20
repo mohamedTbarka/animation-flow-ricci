@@ -1,11 +1,10 @@
+import time
+import cv2
+import numpy as np
 import pygame
-from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
-import numpy as np
-import math
-import cv2
-import time
+from pygame.locals import *
 
 
 class RicciFlowPlus:
@@ -320,16 +319,19 @@ class RicciFlowPlus:
 
     def capture_frame(self):
         """Capture the current frame for video recording"""
-        # Read the pixels from the OpenGL buffer
-        string_image = pygame.image.tostring(self.screen, 'RGB')
-        temp_surf = pygame.image.fromstring(string_image, self.display, 'RGB')
+        # Get the buffer size
+        x, y, width, height = glGetIntegerv(GL_VIEWPORT)
 
-        # Convert Pygame surface to numpy array for OpenCV
-        image_array = pygame.surfarray.array3d(temp_surf)
-        image_array = image_array.swapaxes(0, 1)
+        # Read pixels directly from OpenGL buffer
+        glPixelStorei(GL_PACK_ALIGNMENT, 1)
+        data = glReadPixels(x, y, width, height, GL_RGB, GL_UNSIGNED_BYTE)
 
-        # Convert from RGB to BGR for OpenCV
-        image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
+        # Convert to numpy array
+        image_array = np.frombuffer(data, dtype=np.uint8)
+        image_array = image_array.reshape((height, width, 3))
+
+        # Flip the image vertically (OpenGL and OpenCV have different coordinate systems)
+        image_array = np.flipud(image_array)
 
         return image_array
 
@@ -350,14 +352,17 @@ class RicciFlowPlus:
 
             self.compute_ricci_flow()
 
+            # Clear buffers
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
             glClearColor(0.05, 0.05, 0.1, 1)
 
+            # Draw everything
             self.draw_mesh()
             self.draw_outline_plus()
             self.render_text()
 
-            pygame.display.flip()
+            # Ensure all GL commands are executed
+            glFinish()
 
             # Record frame if video recording is enabled
             if self.record_video:
@@ -366,7 +371,7 @@ class RicciFlowPlus:
                 self.frame_count += 1
 
                 # Print progress
-                if self.frame_count % 60 == 0:  # Show progress every second
+                if self.frame_count % 60 == 0:
                     print(f"Recording progress: {self.frame_count / self.total_frames * 100:.1f}%")
 
                 # Check if we've recorded enough frames
@@ -376,7 +381,10 @@ class RicciFlowPlus:
                     pygame.quit()
                     return
 
+            # Update display
+            pygame.display.flip()
             clock.tick(self.fps)
+
 
 if __name__ == "__main__":
     print("Starting Team Plus Animation Recording...")
